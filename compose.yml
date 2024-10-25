@@ -1,0 +1,77 @@
+version: "2"
+
+services:
+  redis:
+    image: redis:6.2-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis:/data
+
+  db-1:
+    image: postgres:14.1-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=producer_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-1:/var/lib/postgresql/data
+
+  db-2:
+    image: postgres:14.1-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=consumer_app
+    ports:
+      - "5433:5432"
+    volumes:
+      - db-2:/var/lib/postgresql/data
+
+  producer:
+    build: ./producer
+    command: sh -c "python manage.py seed_superuser && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./producer:/usr/src/app/
+    ports:
+      - 8000:8000
+    depends_on:
+      - redis
+      - db-1
+
+  consumer:
+    build: ./consumer
+    command: python manage.py runserver 0.0.0.0:8001
+    volumes:
+      - ./consumer:/usr/src/app/
+    ports:
+      - 8001:8001
+    depends_on:
+      - redis
+      - producer
+      - db-2
+
+  pubsub_consumer:
+    build: ./consumer
+    restart: always
+    command: python manage.py consume_users
+    volumes:
+      - ./consumer:/usr/src/app/
+    depends_on:
+      - redis
+      - producer
+      - consumer
+      - db-2
+
+volumes:
+  redis:
+    driver: local
+  db-1:
+    driver: local
+  db-2:
+    driver: local
